@@ -28,7 +28,7 @@ Three classes of solutions exist, each with limitations:
 
 **ID-at-creation protocols** (Yjs [4], Automerge [5], Loro [6]) assign globally unique identifiers at insertion time. Concurrent creation of the same concept produces two distinct nodes that must be reconciled later. These systems do not collapse duplicates — they accept proliferation and leave deduplication to the application layer.
 
-**Post-hoc cleanup** (content-addressed systems such as IPFS [9] and Syncthing) detects duplicates by content hash after writes propagate, then uses tombstone invalidation and garbage collection. This creates a window of inconsistency where orphan edges exist.
+**Post-hoc cleanup** (content-addressed systems such as IPFS [7] and Syncthing) detects duplicates by content hash after writes propagate, then uses tombstone invalidation and garbage collection. This creates a window of inconsistency where orphan edges exist.
 
 No existing system resolves the problem at projection time by rewriting edge references before they enter the canonical table.
 
@@ -102,7 +102,7 @@ Let $\mathcal{O}$ denote the operation alphabet and $K$ the key space. Each oper
 
 **Lemma 1 (Kernel of CK-Merge).** The merge $M_{\text{CK}}$ is many-to-one over each equivalence class. Two operation sets produce the same output iff for every key-class $C_k$, the representative $\rho_k(C_k \cap O_1) = \rho_k(C_k \cap O_2)$. The information discarded is exactly the within-class loser set $O \setminus W(O)$.
 
-**Lemma 2 (Information-Loss Lower Bound).** Any CK-CRDT merge satisfying (K1)–(K3) must discard at least $|O| - |\kappa(O)|$ operations. The bound is tight: CK-CRDT merge achieves exactly this loss. No K1-K3-compliant merge can do better, because $\rho_k$ maps each key class to a single element by construction.
+**Lemma 2 (Information-Loss Lower Bound).** For any CK-CRDT $(\kappa, \{\rho_k\}, M)$ satisfying (K1)–(K3), the merge discards at least $|O| - |\kappa(O)|$ operations. The bound is tight: CK-CRDT merge achieves exactly this loss. The bound holds because the CK-CRDT definition (Definition 2) requires $\rho_k$ to map each key class to a single element — this is a structural property of the CK-CRDT class, not a consequence of K1–K3 alone. K1–K3 ensure the partition into classes is deterministic and content-local; the "one representative per class" constraint comes from $\rho_k$'s signature in Definition 2.
 
 ---
 
@@ -116,11 +116,14 @@ We define three properties of the content key $\kappa$:
 
 **(K3) Non-Key Invariance:** Updating a non-key field does not change $\kappa(o)$.
 
-**Theorem 3 (Convergence — Necessity and Sufficiency).** If $\kappa$ satisfies (K1)–(K3) and each $\rho_k$ is an argmax, then $M$ converges. Conversely, violating any one property permits divergence or correctness degradation:
+**Theorem 3 (Convergence — Necessity and Sufficiency).** If $\kappa$ satisfies (K1)–(K3) and each $\rho_k$ is an argmax, then $M$ converges. Conversely, violating any one property permits divergence or correctness degradation.
 
-- *K1 violation:* Non-deterministic key → different peers produce different partitions → divergence. Verified by `test_k1_necessity_divergence`: $|M_A(B)| = 1 \neq 2 = |M_B(B)|$.
-- *K2 violation:* Key depends on bag size → different delivery orders → different outputs. Verified by `test_k2_necessity_divergence`.
-- *K3 violation:* Key reads non-key field → semantic duplicate (2 entities instead of 1). Convergence holds but correctness degrades. Verified by `test_k3_necessity_semantic_duplicate`.
+*Sufficiency sketch:* (K1) ensures all peers compute the same partition $\kappa(B)$. (K2) ensures the partition is invariant under delivery order. (K3) ensures metadata updates don't shift keys. Given a stable partition, the binary merge $m_k(o_1, o_2) = \rho_k(\{o_1, o_2\})$ satisfies CAI under argmax (commutative by set symmetry, associative by Theorem 1, idempotent by Theorem 1(b)). The union of independent per-class CAI merges is CAI. Full proof in [9].
+
+*Necessity constructions:*
+- *K1 violation:* Non-deterministic key → different peers produce different partitions → divergence. Verified: $|M_A(B)| = 1 \neq 2 = |M_B(B)|$.
+- *K2 violation:* Key depends on bag size → different delivery orders → different outputs. Verified.
+- *K3 violation:* Key reads non-key field → semantic duplicate (2 entities instead of 1). Convergence holds but correctness degrades.
 
 ---
 
@@ -247,7 +250,7 @@ The following results extend the framework without requiring standalone theorems
 
 **Record linkage.** Fellegi–Sunter [2] and Cohen et al. [3] address record linkage using probabilistic matching. Our CK-CRDT framework extends the keying idea to the distributed, concurrent setting where multiple peers create records independently.
 
-**Content-addressed storage.** IPFS [9] and Git [11] use content hashes but lack CRDT merge functions. Syncthing uses block-level content addressing with file-level merge. These systems illustrate the keying pattern but fall outside the CK-CRDT framework.
+**Content-addressed storage.** IPFS [7] and Git [8] use content hashes but lack CRDT merge functions. Syncthing uses block-level content addressing with file-level merge. These systems illustrate the keying pattern but fall outside the CK-CRDT framework.
 
 **Collaborative editing.** Yjs [4], Automerge [5], and Loro [6] use ID-at-creation for position stability. Content-keying would collapse operations at different positions with identical content, breaking sequence semantics.
 
@@ -261,7 +264,7 @@ We formalized content-keyed CRDTs and proved four main results: argmax monotonic
 
 ## References
 
-[1] M. Shapiro, N. Preguiça, C. Baquero, and M. Zawirski, "Conflict-Free Replicated Data Types," in *Stabilization, Safety, and Security of Distributed Systems*, LNCS 7032, Springer, 2011, pp. 386–400.
+[1] M. Shapiro, N. Preguiça, C. Baquero, and M. Zawirski, "Conflict-Free Replicated Data Types," in *Stabilization, Safety, and Security of Distributed Systems*, LNCS 6976, Springer, 2011, pp. 386–400.
 
 [2] I. P. Fellegi and A. B. Sunter, "A Theory for Record Linkage," *Journal of the American Statistical Association*, vol. 64, no. 328, pp. 1183–1210, 1969.
 
@@ -273,26 +276,8 @@ We formalized content-keyed CRDTs and proved four main results: argmax monotonic
 
 [6] Loro Contributors, "Loro: A CRDT Framework for Collaborative Editing with Delta State," 2023–present. https://github.com/loro-dev/loro
 
-[7] L. D. Ibáñez, H. S. Molli, P. Molli, and O. Corby, "Live Linked Data: Synchronising Semantic Stores with Commutative Replicated Data Types," *International Journal of Metadata, Semantics and Ontologies*, vol. 8, no. 2, art. 119, 2013.
+[7] J. Benet, "IPFS - Content Addressed, Versioned, P2P File System," arXiv:1407.3561, 2014.
 
-[8] A.-C. N. Ngomo and S. Auer, "LIMES — A Time-Efficient Approach for Large-Scale Link Discovery on the Web of Data," in *Proceedings of IJCAI 2011*, 2011, pp. 2312–2317.
+[8] S. Chacon and B. Straub, *Pro Git*, 2nd ed. Apress, 2014.
 
-[9] J. Benet, "IPFS - Content Addressed, Versioned, P2P File System," arXiv:1407.3561, 2014.
-
-[10] M. Zawirski, A. Bieniusa, V. Balegas, S. Duarte, C. Baquero, M. Shapiro, and N. Preguiça, "SwiftCloud: Fault-Tolerant Geo-Replication Integrated all the Way to the Client Machine," in *Proceedings of SRDS-W 2014*, 2014, pp. 30–33.
-
-[11] S. Chacon and B. Straub, *Pro Git*, 2nd ed. Apress, 2014.
-
-[12] M. Buus, "Hypercore: An Append-only Log Built for Feeding Distributed Systems," 2018. https://hypercore-protocol.org/
-
-[13] M. Kleppmann, "Making CRDTs Byzantine Fault Tolerant," in *Proceedings of PaPoC*, 2022.
-
-[14] S. Sadhu, "Conflict-Free Knowledge Graph Projection: A Three-Phase CRDT Pipeline for Multi-Agent Memory Systems," preprint, 2026.
-
-[15] P. S. Almeida, A. Shoker, and C. Baquero, "Delta State Replicated Data Types," *Journal of Parallel and Distributed Computing*, vol. 111, pp. 162–173, 2018.
-
-[16] P. Christen, *Data Matching: Concepts and Techniques for Record Linkage, Entity Resolution, and Duplicate Detection*, Springer, 2012.
-
-[17] L. Lamport, "Time, Clocks, and the Ordering of Events in a Distributed System," *Communications of the ACM*, vol. 21, no. 7, pp. 558–565, 1978.
-
-[18] S. S. Kulkarni, M. Demirbas, D. Madappa, B. Avva, and M. Leone, "Logical Physical Clocks," in *Proceedings of OPODIS 2014*, LNCS 8878, Springer, 2014, pp. 17–32.
+[9] S. Sadhu, "Conflict-Free Knowledge Graph Projection: A Three-Phase CRDT Pipeline for Multi-Agent Memory Systems," preprint, 2026.
