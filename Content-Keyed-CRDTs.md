@@ -80,9 +80,9 @@ Let $\mathcal{O}$ denote the operation alphabet and $K$ the key space. Each oper
 
 (b) $\rho_k$ is content-stable: $\rho_k(S \cup \{\rho_k(S)\}) = \rho_k(S)$.
 
-(a) and (b) are equivalent under the argmax premise.
+(a) and (b) are equivalent under the argmax premise (neither property alone implies the other for arbitrary $\rho$).
 
-*Proof.* ($\Rightarrow$) Let $c = \rho_k(S)$. Then $S \cup \{c\} \supseteq S$, so by monotonicity $\rho_k(S \cup \{c\}) \geq c$. Since $\rho_k$ selects the maximum, and $c$ is already the maximum of $S$, $\rho_k(S \cup \{c\}) = c$. ($\Leftarrow$) Let $S \subseteq S'$ and $c' = \rho_k(S')$. Since $S \subseteq S'$, $\rho_k(S) \in S'$. If $\rho_k(S) > c'$, then $\rho_k(S) \in S'$ and $\rho_k(S) > \rho_k(S')$, contradicting the argmax property. $\square$
+*Proof.* ($\Rightarrow$) Let $c = \rho_k(S)$. Then $S \cup \{c\} \supseteq S$, so by monotonicity $\rho_k(S \cup \{c\}) \geq c$. Since $\rho_k$ is an argmax over a total order, it selects the unique maximum of $S \cup \{c\}$. Since $c$ is already the maximum of $S$ (by definition $c = \rho_k(S)$), no element of $S$ exceeds $c$. Therefore $\rho_k(S \cup \{c\}) = c$. ($\Leftarrow$) Let $S \subseteq S'$ and $c' = \rho_k(S')$. Since $S \subseteq S'$, $\rho_k(S) \in S'$. If $\rho_k(S) > c'$, then $\rho_k(S) \in S'$ and $\rho_k(S) > \rho_k(S')$, contradicting the argmax property (which requires $\rho_k(S')$ to be the maximum of $S'$). Therefore $\rho_k(S') \geq \rho_k(S)$. $\square$
 
 **Corollary 1.** In our pipeline, $\rho_k(S) = \max(S)$, which is an argmax over the natural total order on IDs.
 
@@ -102,7 +102,9 @@ Let $\mathcal{O}$ denote the operation alphabet and $K$ the key space. Each oper
 
 **Lemma 1 (Kernel of CK-Merge).** The merge $M_{\text{CK}}$ is many-to-one over each equivalence class. Two operation sets produce the same output iff for every key-class $C_k$, the representative $\rho_k(C_k \cap O_1) = \rho_k(C_k \cap O_2)$. The information discarded is exactly the within-class loser set $O \setminus W(O)$.
 
-**Lemma 2 (Information-Loss Lower Bound).** For any CK-CRDT $(\kappa, \{\rho_k\}, M)$ satisfying (K1)–(K3), the merge discards at least $|O| - |\kappa(O)|$ operations. The bound is tight: CK-CRDT merge achieves exactly this loss. The bound holds because the CK-CRDT definition (Definition 2) requires $\rho_k$ to map each key class to a single element — this is a structural property of the CK-CRDT class, not a consequence of K1–K3 alone. K1–K3 ensure the partition into classes is deterministic and content-local; the "one representative per class" constraint comes from $\rho_k$'s signature in Definition 2.
+**Lemma 2 (Information-Loss Lower Bound).** For any CK-CRDT $(\kappa, \{\rho_k\}, M)$ satisfying (K1)–(K3), the merge discards at least $|O| - |\kappa(O)|$ operations, and this bound is tight.
+
+*Proof.* The canonical state contains at most one representative per key class. Since there are $|\kappa(O)|$ distinct keys, $|\Sigma| \leq |\kappa(O)|$, so at least $|O| - |\kappa(O)|$ operations are discarded. CK-CRDT merge achieves exactly this: $\rho_k$ maps each non-empty class to one element (by Definition 2), producing exactly $|\kappa(O)|$ representatives. The tightness depends on two independent facts: (i) the structural constraint that $\rho_k : \mathcal{P}(\mathcal{O}_k) \to \mathcal{O}_k$ selects one representative per class (Definition 2), and (ii) K1–K3 ensure the partition into classes is deterministic and content-local, so no class is split or duplicated across peers. $\square$
 
 ---
 
@@ -116,14 +118,18 @@ We define three properties of the content key $\kappa$:
 
 **(K3) Non-Key Invariance:** Updating a non-key field does not change $\kappa(o)$.
 
-**Theorem 3 (Convergence — Necessity and Sufficiency).** If $\kappa$ satisfies (K1)–(K3) and each $\rho_k$ is an argmax, then $M$ converges. Conversely, violating any one property permits divergence or correctness degradation.
+**Theorem 3 (Convergence — Necessity and Sufficiency).** The properties (K1)–(K3) are necessary and sufficient for convergence under argmax selection. Specifically:
 
-*Sufficiency sketch:* (K1) ensures all peers compute the same partition $\kappa(B)$. (K2) ensures the partition is invariant under delivery order. (K3) ensures metadata updates don't shift keys. Given a stable partition, the binary merge $m_k(o_1, o_2) = \rho_k(\{o_1, o_2\})$ satisfies CAI under argmax (commutative by set symmetry, associative by Theorem 1, idempotent by Theorem 1(b)). The union of independent per-class CAI merges is CAI. Full proof in [9].
+*(Sufficiency.)* If $\kappa$ satisfies (K1)–(K3) and each $\rho_k$ is an argmax, then $M$ converges: all peers with the same operation bag produce the same canonical state.
 
-*Necessity constructions:*
-- *K1 violation:* Non-deterministic key → different peers produce different partitions → divergence. Verified: $|M_A(B)| = 1 \neq 2 = |M_B(B)|$.
-- *K2 violation:* Key depends on bag size → different delivery orders → different outputs. Verified.
-- *K3 violation:* Key reads non-key field → semantic duplicate (2 entities instead of 1). Convergence still holds (same-bag-same-output), but correctness degrades: the CK-CRDT fails its primary purpose of entity deduplication.
+*(Necessity.)* Violating any one of (K1)–(K3) while satisfying the other two permits either divergence (different peers produce different outputs) or correctness degradation (convergence holds but entity deduplication fails).
+
+*Proof (sufficiency).* (K1) ensures all peers compute the same partition $\kappa(B)$. (K2) ensures the partition is invariant under delivery order. (K3) ensures metadata updates don't shift keys. Given a stable partition, the binary merge $m_k(o_1, o_2) = \rho_k(\{o_1, o_2\})$ satisfies CAI under argmax: commutative by set symmetry ($\{o_1, o_2\} = \{o_2, o_1\}$), associative by Theorem 1 ($m_k(m_k(o_1, o_2), o_3) = \rho_k(\{\rho_k(\{o_1, o_2\}), o_3\}) = \rho_k(\{o_1, o_2, o_3\})$ since argmax of a set is order-independent), and idempotent by Theorem 1(b). The union of independent per-class CAI merges is CAI: classes are disjoint and processed independently, so commutativity and associativity hold across classes. $\square$
+
+*Proof (necessity — sketch).*
+- *K1 violation:* Non-deterministic key → different peers produce different partitions → divergence. Example: $B = \{o, o'\}$ with $\kappa_A(o) = \kappa_A(o') = k_1$ but $\kappa_B(o) = k_1, \kappa_B(o') = k_2$. Then $|M_A(B)| = 1 \neq 2 = |M_B(B)|$. Verified: `TestK1Violation`.
+- *K2 violation:* Key depends on bag size → different delivery orders yield different keys → different partitions → divergence. Example: $\kappa(o) = k_a$ if $|B| = 1$ and $\kappa(o) = k_b$ if $|B| > 1$. Verified: `TestK2Violation`.
+- *K3 violation:* Key reads non-key field → semantic duplicate. Example: $o$ has (name="alice", type="person") with $\kappa(o) = k_1$; $o'$ adds description="lawyer" (a non-key update), but $\kappa(o') = k_2$ because the key derivation reads description. Then $M(B) = \{o, o'\}$ — two entities instead of one. Convergence holds (same bag → same output), but entity deduplication fails. Verified: `TestK3Violation`. $\square$
 
 ---
 
@@ -161,9 +167,9 @@ Phase 3: sigma'_Ev ← merge_edge_ops(O_Ev)
 return Σ, sigma'_Ev, R
 ```
 
-**Convergence.** The pipeline is deterministic over the operation set (Theorem 3). Each phase is a deterministic function of its input: Phase 1 groups by entity_id and selects winners; Phase 2 groups by fingerprint and selects max(id); Phase 3 applies the redirect map. The composition is deterministic regardless of operation order.
+**Convergence.** Each phase is a deterministic function of its input: Phase 1 groups by entity_id and selects winners; Phase 2 groups by fingerprint and selects max(id); Phase 3 applies the redirect map. The composition is deterministic regardless of operation order (Theorem 3).
 
-**No-orphan invariant.** The redirect map (Phase 2) ensures that edges referencing merged-away entities are rewritten (Theorem 2). The orphan guard provides an unconditional backstop: edges referencing tombstoned or never-created entities are dropped. Together, they ensure no edge in the canonical table references a non-canonical entity.
+**No-orphan invariant.** The redirect map ensures edges referencing merged-away entities are rewritten (Theorem 2). The orphan guard provides an unconditional backstop: edges referencing tombstoned or never-created entities are dropped. Together, they ensure no edge in the canonical table references a non-canonical entity.
 
 **Convergence model.** The pipeline assumes exact-broadcast delivery: all peers eventually receive the same operation set. The proof shows delivery-order independence under this model. Partial replication is not modeled.
 
@@ -250,13 +256,13 @@ The false merge rate depends on the domain. In agent memory systems, description
 
 ### 10.4 Orphan Guard Tradeoff
 
-The orphan guard achieves zero orphans by silently dropping edges to non-canonical entities — a deliberate tradeoff favoring invariant enforcement over edge preservation. The convergence claim (Lemma 1) applies to the operation set; the orphan guard is a post-merge filter outside the formal convergence model.
+The orphan guard achieves zero orphans by silently dropping edges to non-canonical entities — a deliberate tradeoff favoring invariant enforcement over edge preservation. The convergence model (Theorem 3) applies to the operation set; the orphan guard is a post-merge filter outside the formal convergence model. In production, an edge to a tombstoned or never-created entity is semantically meaningless, so silent dropping is the correct behavior.
 
 ---
 
 ## 11. Extensions
 
-The following results extend the framework. Proofs are in the companion paper [9] (Theorems 5–8 therein, renumbered here as Theorems 4–7).
+The following results extend the framework. Proofs are in the companion paper [9].
 
 **Composite keys (Theorem 4).** If $\kappa' = (\kappa_1, \kappa_2)$ where each $\kappa_i$ satisfies K1–K3, then $\kappa'$ satisfies K1–K3. Our pipeline's fingerprint $\kappa(o) = \text{SHA-256}(\text{name}, \text{type}, \text{description})$ is a composite key with three components.
 
