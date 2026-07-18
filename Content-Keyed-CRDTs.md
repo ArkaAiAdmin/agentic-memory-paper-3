@@ -123,7 +123,7 @@ We define three properties of the content key $\kappa$:
 *Necessity constructions:*
 - *K1 violation:* Non-deterministic key → different peers produce different partitions → divergence. Verified: $|M_A(B)| = 1 \neq 2 = |M_B(B)|$.
 - *K2 violation:* Key depends on bag size → different delivery orders → different outputs. Verified.
-- *K3 violation:* Key reads non-key field → semantic duplicate (2 entities instead of 1). Convergence holds but correctness degrades.
+- *K3 violation:* Key reads non-key field → semantic duplicate (2 entities instead of 1). Convergence still holds (same-bag-same-output), but correctness degrades: the CK-CRDT fails its primary purpose of entity deduplication.
 
 ---
 
@@ -136,6 +136,30 @@ We instantiate the CK-CRDT framework as a three-phase pipeline for knowledge gra
 **Phase 2 — Canonical Entity Resolution.** Entities in $\sigma_E$ are grouped by inception fingerprint — a SHA-256 hash of `(name, type, description)` computed at creation time. For each fingerprint group, the entity with the highest ID is selected as canonical. A redirect map $R$ records which IDs were merged into which winners.
 
 **Phase 3 — Edge Projection with Redirect.** Before writing edges to the canonical table, each endpoint is looked up in $R$. Loser IDs are rewritten to winner IDs. An orphan guard drops any edge referencing a non-canonical entity.
+
+**Algorithm 1: Three-Phase Projection**
+
+```
+Input: Operation logs O_E (entity ops), O_Ev (edge ops)
+Output: Canonical entities Σ, canonical edges sigma'_Ev, redirect map R
+
+Phase 1: sigma_E ← merge_entity_ops(O_E)
+  for each entity_id in sigma_E:
+    apply 2P-Set: tombstone if any remove dominates any add
+    apply LWW: select winner per field (name, type, description)
+
+Phase 2: (Σ, R) ← entity_dedup(sigma_E)
+  for each fingerprint group F:
+    winner ← max(F)  // by entity_id
+    for each loser in F \ {winner}: R[loser] ← winner
+
+Phase 3: sigma'_Ev ← merge_edge_ops(O_Ev)
+  for each edge endpoint e in sigma'_Ev:
+    if e in domain(R): e ← R[e]  // rewrite loser to winner
+  sigma'_Ev ← orphan_guard(sigma'_Ev)    // drop non-canonical endpoints
+
+return Σ, sigma'_Ev, R
+```
 
 **Convergence.** The pipeline is deterministic over the operation set (Theorem 3). Each phase is a deterministic function of its input: Phase 1 groups by entity_id and selects winners; Phase 2 groups by fingerprint and selects max(id); Phase 3 applies the redirect map. The composition is deterministic regardless of operation order.
 
@@ -157,9 +181,9 @@ We compare three approaches on 5,000 concurrent entity ops with 50 distinct enti
 | Semantic duplicates | 4,950 | 0 | 0 |
 | Orphan edges | 460 | 460 | **0** |
 | Redirect map entries | 0 | 4,950 | 4,950 |
-| Overhead vs naive | — | +37% | +36–39% |
+| Overhead vs naive | — | +23% | +35% |
 
-The naive merge (equivalent to Yjs/Automerge semantics) preserves all duplicates and orphan edges. The full pipeline eliminates both at ~38% overhead — dominated by Phase 1 entity merge (~94% of runtime), not by content-keyed dedup.
+The naive merge (equivalent to Yjs/Automerge semantics) preserves all duplicates and orphan edges. The full pipeline eliminates both at ~35% overhead — dominated by Phase 1 entity merge (~94% of runtime), not by content-keyed dedup.
 
 ### 8.2 Scaling
 
@@ -175,7 +199,7 @@ Throughput degrades 1.96x from 100K to 10M, attributable to Python dict overhead
 
 ### 8.3 Adversarial Robustness
 
-The pipeline was tested against 35 adversarial scenarios across 10 categories: fingerprint collision resistance, version-vector overflow, malicious peer behavior, boundary cases, operational resilience, orphan under partition, redirect map consistency, serializability limits, tombstone edge cases, and mixed operations. Key results:
+The pipeline was tested against 35 test scenarios across 10 categories, including 14 genuinely adversarial tests (Byzantine version vectors, fingerprint collision attacks, malicious peer behavior, clock skew) and 21 standard robustness tests (boundary cases, concurrency, edge conditions). Key results:
 
 - **Fingerprint collision:** 10,000 ops on a single fingerprint group merge in <0.1s — graceful degradation, no crash.
 - **K1-necessity counterexample:** Two peers using different normalizations produce different fingerprints → divergence confirmed.
@@ -232,7 +256,7 @@ The orphan guard achieves zero orphans by silently dropping edges to non-canonic
 
 ## 11. Extensions
 
-The following results extend the framework without requiring standalone theorems:
+The following results extend the framework. Proofs are in the companion paper [9] (Theorems 5–8 therein, renumbered here as Theorems 4–7).
 
 **Composite keys (Theorem 4).** If $\kappa' = (\kappa_1, \kappa_2)$ where each $\kappa_i$ satisfies K1–K3, then $\kappa'$ satisfies K1–K3. Our pipeline's fingerprint $\kappa(o) = \text{SHA-256}(\text{name}, \text{type}, \text{description})$ is a composite key with three components.
 
@@ -258,7 +282,7 @@ The following results extend the framework without requiring standalone theorems
 
 ## 13. Conclusion
 
-We formalized content-keyed CRDTs and proved four main results: argmax monotonicity (Theorem 1), layered no-orphan composition (Theorem 2), tight information-loss bounds (Lemmas 1–2), and necessary-and-sufficient convergence conditions (Theorem 3). The framework classifies Docker, IPFS, Git, Yjs, Automerge, and Loro, explaining when content-keying is necessary and when ID-at-creation suffices. We instantiated the framework as a three-phase projection pipeline, evaluated it at 10M operations against naive-merge and ID-at-creation baselines, and verified adversarial robustness with 35 test scenarios. The K1–K3 checklist provides a concrete design tool for any system that groups operations by content before merging.
+We formalized content-keyed CRDTs and proved four main results: argmax monotonicity (Theorem 1), layered no-orphan composition (Theorem 2), tight information-loss bounds (Lemmas 1–2), and necessary-and-sufficient convergence conditions (Theorem 3). The framework classifies Docker, IPFS, Git, Yjs, Automerge, and Loro, explaining when content-keying is necessary and when ID-at-creation suffices. We instantiated the framework as a three-phase projection pipeline, evaluated it at 10M operations against naive-merge and ID-at-creation baselines, and verified robustness with 35 test scenarios (14 adversarial, 21 standard). The K1–K3 checklist provides a concrete design tool for any system that groups operations by content before merging.
 
 ---
 
