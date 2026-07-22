@@ -46,9 +46,13 @@ This paper makes four contributions:
 
 We additionally instantiate the framework as a three-phase projection pipeline (§5), evaluate it against baselines at scales up to 10M operations (§6), and classify Docker, IPFS, Git, Yjs, Automerge, and Loro as instances or non-instances (§7). The CK-CRDT framework guides the design of any system that groups operations by content before merging: the K1–K3 checklist tells designers exactly what their content key must satisfy, the information-loss lemma quantifies what is discarded, and the classification identifies when content-keying is necessary versus when ID-at-creation suffices.
 
+### 1.3.1 Companion Paper Relationship
+
+This paper presents the production systems architecture, three-phase projection pipeline, foreign-key edge redirection, and empirical evaluation of CRDT knowledge graph projection. For the formal algebraic framework, content-key monotonicity proofs, composite-key extensions, and complete proofs of Theorems 1–8, we refer the reader to our companion theoretical paper, *A Framework for Content-Keyed CRDT Convergence* [Sadhu, 2026].
+
 ### 1.4 Scope and Assumptions
 
-The convergence model assumes exact-broadcast delivery: all peers eventually receive the same operation set. Delivery-order independence under partial replication is not modeled. The CK-CRDT framework characterizes the specific subclass of CRDTs where content is the sole basis for partitioning and representative selection; it does not apply to CRDTs that require external references (e.g., G-Counters, which read peer IDs and clocks).
+The convergence model assumes exact-broadcast delivery: all peers eventually receive the same operation set. Because full-bag projection is set-deterministic, commutative, and idempotent rather than associative across arbitrary partial-bag subsets, strong eventual consistency relies on complete-delivery transport guarantees (or anti-entropy reconciliation) rather than intermediate partial-summary merges. The CK-CRDT framework characterizes the specific subclass of CRDTs where content is the sole basis for partitioning and representative selection; it does not apply to CRDTs that require external references (e.g., G-Counters, which read peer IDs and clocks).
 
 ---
 
