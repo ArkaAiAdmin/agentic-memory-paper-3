@@ -1,8 +1,8 @@
 # Conflict-Free Multi-Agent Memory: A Production Knowledge Graph Pipeline with Strong Eventual Consistency
 
-**Author:** Subrata Sadhu
-**Affiliation:** Independent Researcher
-**Contact:** sadhu.arka507@gmail.com
+**Author:** [ANONYMIZED]
+**Affiliation:** [ANONYMIZED]
+**Contact:** [ANONYMIZED]
 
 ---
 
