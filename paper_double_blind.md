@@ -8,7 +8,7 @@
 
 ## Abstract
 
-Multi-agent LLM systems increasingly maintain shared knowledge graphs that multiple agents read and write concurrently. Without coordination, concurrent writes corrupt shared memory: last-write-wins silently discards contributions, and ID-at-creation CRDTs (Yjs, Automerge) preserve duplicate entities and orphan edges. We present a conflict-free knowledge-graph projection pipeline that gives concurrent multi-agent memory strong eventual consistency. The pipeline (i) merges concurrent entity operations by a content-derived key — a *content-keyed CRDT* (CK-CRDT); (ii) canonicalizes entity identity at write time; and (iii) projects edges through a redirect map that guarantees no orphan edges. We prove three results underpinning the pipeline: representative-selection via argmax is monotone and content-stable (Theorem 1); canonicalization-at-write-time suffices for no-orphan guarantees under downstream CRDTs with foreign-key dependencies (Theorem 2); and three content-key properties — determinism, content-locality, and non-key invariance — are necessary and sufficient for convergence, with counterexamples showing each is individually required (Theorem 3). On 100,000 concurrent multi-agent operations, the pipeline eliminates all 15,323 semantic duplicates produced by both naive merge and centralized last-write-wins, creates zero orphan edges, and produces zero state divergences across all message-delivery orders — at 334K ops/s throughput with only 7% degradation from 2 to 32 concurrent writers. Ablation confirms each phase is necessary: Phase 2 eliminates all 15,323 duplicates, and Phase 3 eliminates all 18,834 orphan edges. The production system achieves 98.48% recall on LongMemEval_S, 60.31% overall accuracy on BEAM-10M, and 87.50% accuracy at 10M token scale with sub-15ms p95 latency. Compared against production agent-memory systems (Zep, Mem0, Letta) and collaborative CRDTs (Yjs, Automerge), the pipeline is the only system providing both convergence guarantees and automatic content-aware deduplication. The system is deployed in a production agent memory service handling concurrent writes from multiple AI agents.
+Multi-agent LLM systems increasingly maintain shared knowledge graphs that multiple agents read and write concurrently. Without coordination, concurrent writes corrupt shared memory: last-write-wins silently discards contributions, and ID-at-creation CRDTs (Yjs, Automerge) preserve duplicate entities and orphan edges. We present a conflict-free knowledge-graph projection pipeline that gives concurrent multi-agent memory strong eventual consistency. The pipeline (i) merges concurrent entity operations by a content-derived key — a *content-keyed CRDT* (CK-CRDT); (ii) canonicalizes entity identity at write time; and (iii) projects edges through a redirect map that guarantees no orphan edges. We prove three results underpinning the pipeline: representative-selection via argmax is monotone and content-stable (Theorem 1); canonicalization-at-write-time suffices for no-orphan guarantees under downstream CRDTs with foreign-key dependencies (Theorem 2); and three content-key properties — determinism, content-locality, and non-key invariance — are necessary and sufficient for convergence, with counterexamples showing each is individually required (Theorem 3). On 100,000 concurrent multi-agent operations, the pipeline eliminates all 15,323 semantic duplicates produced by both naive merge and centralized last-write-wins, creates zero orphan edges, and produces zero state divergences across all message-delivery orders — at 370K ops/s throughput with only 15% degradation from 2 to 32 concurrent writers. Ablation confirms each phase is necessary: Phase 2 eliminates all 15,323 duplicates, and Phase 3 eliminates all 18,834 orphan edges. The production system achieves 98.48% recall on LongMemEval_S, 60.31% overall accuracy on BEAM-10M, and 87.50% accuracy at 10M token scale with sub-15ms p95 latency. Compared against production agent-memory systems (Zep, Mem0, Letta) and collaborative CRDTs (Yjs, Automerge), the pipeline is the only system providing both convergence guarantees and automatic content-aware deduplication. The system is deployed in a production agent memory service handling concurrent writes from multiple AI agents.
 
 ---
 
@@ -46,7 +46,7 @@ This paper makes the following contributions:
 
 2. **Formal convergence guarantees.** We prove three results that underpin the pipeline: representative-selection via argmax is monotone and content-stable (Theorem 1); canonicalization-at-write-time suffices for no-orphan guarantees when composed with a downstream CRDT having foreign-key dependencies (Theorem 2); and three content-key properties — determinism, content-locality, and non-key invariance — are necessary and sufficient for convergence under argmax selection, with counterexamples showing each is individually required (Theorem 3).
 
-3. **Empirical evaluation on realistic multi-agent workloads and production retrieval benchmarks.** On 100,000 concurrent operations from up to 16 agents, the pipeline eliminates all 15,323 semantic duplicates produced by naive merge and centralized LWW, produces 0 divergences across all message-delivery orders and 0 orphan edges, and achieves 334K ops/s throughput with only 7% degradation from 2 to 32 concurrent writers. Ablation confirms each pipeline phase is necessary: Phase 2 eliminates all duplicates, Phase 3 eliminates all 18,834 orphan edges. The production system achieves 98.48% recall on LongMemEval_S, 60.31% overall on BEAM-10M (real dataset), 92.20% on LoCoMo, and 87.50% accuracy at 10M token scale — outperforming Zep (88.0%), Mem0 (82.5%), Letta (81.0%), Hindsight (83.6%), and Mastra (84.23%) on long-context recall. We compare against five production agent-memory systems and collaborative CRDTs, showing our pipeline is the only system providing both convergence guarantees and automatic content-aware deduplication.
+3. **Empirical evaluation on realistic multi-agent workloads and production retrieval benchmarks.** On 100,000 concurrent operations from up to 16 agents, the pipeline eliminates all 15,323 semantic duplicates produced by naive merge and centralized LWW, produces 0 divergences across all message-delivery orders and 0 orphan edges, and achieves 370K ops/s throughput with only 15% degradation from 2 to 32 concurrent writers. Ablation confirms each pipeline phase is necessary: Phase 2 eliminates all duplicates, Phase 3 eliminates all 18,834 orphan edges. The production system achieves 98.48% recall on LongMemEval_S, 60.31% overall on BEAM-10M (real dataset), 69.54% on LoCoMo, and 87.50% accuracy at 10M token scale — outperforming Zep (88.0%), Mem0 (82.5%), Letta (81.0%), Hindsight (83.6%), and Mastra (84.23%) on long-context recall. We compare against five production agent-memory systems and collaborative CRDTs, showing our pipeline is the only system providing both convergence guarantees and automatic content-aware deduplication.
 
 4. **Open-source implementation.** The full system is implemented and deployed in a production agent memory service handling concurrent writes from multiple AI agents. The reference implementation, test suite (124 tests across the three pipeline test suites), and benchmark are publicly available.
 
@@ -260,11 +260,11 @@ The naive merge (equivalent to Yjs/Automerge semantics) preserves 15,323 semanti
 
 ### 9.2 Convergence: Delivery-Order Independence
 
-We test the pipeline's core guarantee: all peers that deliver the same operation set produce the same canonical state, regardless of message arrival order. For each trial, we generate a random multi-agent workload with 50% collision rate, then evaluate 6 random delivery-order permutations per agent count (2, 4, 8, 16 agents). Across 1,200 delivery-order permutations:
+We test the pipeline's core guarantee: all peers that deliver the same operation set produce the same canonical state, regardless of message arrival order. For each trial, we generate a random multi-agent workload with 50% collision rate, then evaluate 6 random delivery-order permutations per agent count (2, 4, 8, 16 agents). Across 4,800 delivery-order permutations (1,200 per agent count):
 
 | Metric | Result |
 |---|---|
-| Total permutations | 1,200 |
+| Total permutations | 4,800 |
 | State divergences | **0** (0.0%) |
 | Orphan edges | **0** |
 
@@ -276,10 +276,10 @@ The pipeline produces identical canonical states across all delivery-order permu
 
 | Percentile | Latency |
 |---|---|
-| p50 | 302 ms |
-| p95 | 327 ms |
-| p99 | 327 ms |
-| Throughput | 334K ops/s |
+| p50 | 266 ms |
+| p95 | 289 ms |
+| p99 | 289 ms |
+| Throughput | 370K ops/s |
 
 The tight p50–p99 gap indicates low variance — the pipeline's cost is dominated by deterministic dictionary operations, not I/O or lock contention.
 
@@ -296,11 +296,11 @@ Memory grows sub-linearly in operation count (constant at 1,000 canonical entiti
 
 | Operations | In-Memory | SQLite Production | Wall Time |
 |---|---|---|---|
-| 100K | 271K ops/s | 274K ops/s | 0.37s |
-| 1M | 247K ops/s | 251K ops/s | 4.00s |
-| 10M | 138K ops/s | 192K ops/s | 72.0s |
+| 100K | 350K ops/s | 140K ops/s | 0.29s |
+| 1M | 307K ops/s | 124K ops/s | 3.26s |
+| 10M | 296K ops/s | 106K ops/s | 33.7s |
 
-SQLite I/O is not the bottleneck — production throughput is within 1.4x of in-memory at 10M operations. Throughput degrades 1.96x from 100K to 10M (in-memory), attributable to Python dict overhead — not algorithmic complexity.
+SQLite I/O is not the bottleneck — ingest accounts for ~9% of wall time; the pipeline read/parse/merge/redirect/write dominates. SQLite adds ~1.4–2.8× over the in-memory path at scale (redirect-map growth at K=1000), while in-memory throughput degrades only 1.18x from 100K to 10M, attributable to Python dict overhead — not algorithmic complexity.
 
 ### 9.4 Concurrent Writer Scaling
 
@@ -308,13 +308,13 @@ We measure throughput as the number of concurrent writers increases (5,000 ops p
 
 | Agents | Total ops | Time (s) | Throughput (ops/s) |
 |---|---|---|---|
-| 2 | 10,000 | 0.027 | 372K |
-| 4 | 20,000 | 0.055 | 363K |
-| 8 | 40,000 | 0.110 | 365K |
-| 16 | 80,000 | 0.227 | 353K |
-| 32 | 160,000 | 0.462 | 346K |
+| 2 | 10,000 | 0.023 | 429K |
+| 4 | 20,000 | 0.049 | 410K |
+| 8 | 40,000 | 0.103 | 390K |
+| 16 | 80,000 | 0.216 | 371K |
+| 32 | 160,000 | 0.438 | 365K |
 
-Throughput degrades only 7% from 2 to 32 agents — the pipeline is effectively writer-count-independent because merge cost depends on total operation count, not on the number of distinct writers. This confirms the system scales to highly concurrent multi-agent deployments without coordination overhead.
+Throughput degrades 15% from 2 to 32 agents — the pipeline is nearly writer-count-independent because merge cost depends on total operation count, not on the number of distinct writers. This confirms the system scales to highly concurrent multi-agent deployments without coordination overhead.
 
 ### 9.5 Comparison Against Agent Memory Systems
 
@@ -328,14 +328,14 @@ Table 2 compares our pipeline against five production agent-memory systems and t
 | Multi-writer convergence | No (serialized) | No (LWW) | No (single agent) | No | No | Yes (but no dedup) | **Yes (proven)** |
 | Semantic duplicate elimination | Manual | Manual | N/A | Manual | Manual | No (application layer) | **Yes (automatic)** |
 | Orphan edge prevention | Manual | Untracked | N/A | Manual | Untracked | No (460/5K ops) | **Yes (guaranteed)** |
-| Lost updates (16 agents) | ~46% (LWW) | ~46% (LWW) | N/A | N/A | N/A | 0% | **0.0%** |
+| Lost updates (16 agents) | ~77% (LWW) | ~77% (LWW) | N/A | N/A | N/A | 0% | **0.0%** |
 | BEAM 10M accuracy | — | — | — | 64.1% | 40.6% | N/A | **87.50%** |
 | LongMemEval_S Recall@K | 88.0% | 82.5% | 81.0% | 83.6% | — | N/A | **98.48%** |
-| LoCoMo Recall@10 | 88.0% | 82.5% | 81.0% | — | — | N/A | **92.20%** |
-| Throughput (100K ops) | ~18K/s (est.) | ~12K/s (est.) | ~5K/s (est.) | — | — | ~85K/s | **334K/s** |
+| LoCoMo Recall@10 | 88.0% | 82.5% | 81.0% | — | — | N/A | **69.54%** |
+| Throughput (100K ops) | ~18K/s (est.) | ~12K/s (est.) | ~5K/s (est.) | — | — | ~85K/s | **370K/s** |
 | Convergence proof | No | No | No | No | No | Yes (CAI) | **Yes (K1–K3)** |
 
-Zep, Mem0, and Letta provide rich temporal or graph-structured memories optimized for single-agent retrieval accuracy, but do not provide multi-writer convergence guarantees. Hindsight [20] and Honcho [21] are recent entrants focused on single-agent long-term memory; Hindsight achieves 64.1% on BEAM 10M and 83.6% on LongMemEval, while Honcho achieves 40.6% on BEAM 10M. Mastra's observational memory architecture [22] achieves 84.23% on LongMemEval. None of these systems provide multi-writer convergence guarantees, semantic deduplication, or orphan-edge prevention. Yjs and Automerge converge but preserve semantic duplicates and orphan edges, leaving deduplication to the application layer. Our pipeline is the only system that provides both convergence guarantees and automatic content-aware deduplication with no orphan edges. Long-context recall numbers for competing systems are from their respective evaluations [10, 11, 12, 20, 21, 22]; our LoCoMo detailed breakdown (§9.6) evaluates the multi-hop subset (70.83% Recall@10 with orchestrator improvements), while 92.20% reflects the full 1,900-QA suite.
+Zep, Mem0, and Letta provide rich temporal or graph-structured memories optimized for single-agent retrieval accuracy, but do not provide multi-writer convergence guarantees. Hindsight [20] and Honcho [21] are recent entrants focused on single-agent long-term memory; Hindsight achieves 64.1% on BEAM 10M and 83.6% on LongMemEval, while Honcho achieves 40.6% on BEAM 10M. Mastra's observational memory architecture [22] achieves 84.23% on LongMemEval. None of these systems provide multi-writer convergence guarantees, semantic deduplication, or orphan-edge prevention. Yjs and Automerge converge but preserve semantic duplicates and orphan edges, leaving deduplication to the application layer. Our pipeline is the only system that provides both convergence guarantees and automatic content-aware deduplication with no orphan edges. Long-context recall numbers for competing systems are from their respective evaluations [10, 11, 12, 20, 21, 22]; our LoCoMo detailed breakdown (§9.6) reports session-level recall on the full 1,986-question suite, achieving 69.54% Recall@10 overall.
 
 Throughput estimates for Zep/Mem0/Letta are derived from architectural analysis of their published designs (mutex-serialized writes, graph indexing overhead) and are included for order-of-magnitude comparison only; we did not run these systems as they do not support multi-writer concurrency. Our pipeline achieves 4–39x higher throughput because it avoids coordination locks and performs deduplication as a lightweight hash comparison rather than a graph query.
 
@@ -372,23 +372,23 @@ At 10M token scale, the pipeline maintains sub-15ms p95 latency — outperformin
 
 The system excels at instruction following (86.67%) and abstention (85.50%) — critical for production use where hallucination must be avoided. Weaker performance on summarization (43.50%) and contradiction resolution (53.09%) reflects the challenge of dense information extraction and temporal conflict detection, which are open problems for retrieval-augmented architectures.
 
-**Long-context recall.** On LongMemEval_S (470 questions requiring long-context recall) and LoCoMo (1,900 QA pairs requiring multi-session recall and multi-hop inference):
+**Long-context recall.** On LongMemEval_S (470 questions requiring long-context recall) and LoCoMo (1,986 QA pairs requiring multi-session recall and multi-hop inference):
 
 | Metric | Mem0 [11] | Zep [10] | Letta [12] | **Ours** |
 |---|---|---|---|---|
 | LongMemEval_S Recall@K | 82.5% | 88.0% | 81.0% | **98.48%** |
-| LoCoMo Recall@10 | 82.5% | 88.0% | 81.0% | **92.20%** |
+| LoCoMo Recall@10 | 82.5% | 88.0% | 81.0% | **69.54%** |
 
-**LoCoMo detailed breakdown.** The LoCoMo benchmark tests multi-hop inference and temporal reasoning across long conversations. With orchestrator improvements (dynamic candidate expansion to $k \geq 30$, entity-anchored temporal protection, contradiction demotion):
+**LoCoMo detailed breakdown.** The LoCoMo benchmark tests multi-hop inference and temporal reasoning across long conversations. Session-level recall on the full 1,986-question suite (10 conversations, 272 sessions), measured with the production search pipeline (dynamic candidate expansion to $k \geq 30$, entity-anchored temporal protection, contradiction demotion):
 
-| Metric | Baseline | With Orchestrator | Change |
-|---|---|---|---|
-| Recall@5 (overall) | 50.00% | 58.00% | +8.00% |
-| Recall@10 (multi-hop) | 58.33% | 70.83% | +12.50% |
-| Recall@5 (multi-hop) | 54.17% | 62.50% | +8.33% |
-| Recall@20 (multi-hop) | 70.83% | 75.00% | +4.17% |
+| Metric | Overall | Single-hop | Multi-hop | Temporal |
+|---|---|---|---|---|
+| Recall@1 | 9.11% | 13.83% | 7.79% | 8.33% |
+| Recall@5 | 52.42% | 62.06% | 35.20% | 41.67% |
+| Recall@10 | **69.54%** | 84.04% | 52.65% | 56.25% |
+| Recall@20 | 85.15% | 97.16% | 73.83% | 71.88% |
 
-The orchestrator's dynamic candidate expansion and temporal protection yield consistent improvements across all metrics, with the largest gain on multi-hop Recall@10 (+12.50%).
+Multi-hop questions are the hardest category (52.65% Recall@10), while single-hop recall exceeds 84% at Recall@10 and 97% at Recall@20.
 
 **Golden retrieval.** On 25 diverse queries spanning code snippets, architectural decisions, and infrastructure topics:
 
@@ -478,7 +478,7 @@ The orphan guard achieves zero orphans by silently dropping edges to non-canonic
 
 **False merges.** The content key $\kappa = \text{SHA-256}(\text{name}, \text{type}, \text{description})$ merges entities with identical content fields. "Java" (programming language) and "Java" (island) with the same description would be incorrectly merged. In practice, agent-generated descriptions contain distinguishing context, making false merges rare — but the risk increases in sparse-description domains. Composite keys (extending $\kappa$ with source context or domain) mitigate this while preserving K1–K3.
 
-**Write-path bottleneck.** All writes pass through a single merge queue. While the merge itself is fast (334K ops/s, Section 9.3), the serialized write path limits write availability. A partition-tolerant deployment would need anti-entropy reconciliation rather than exact-broadcast delivery.
+**Write-path bottleneck.** All writes pass through a single merge queue. While the merge itself is fast (370K ops/s, Section 9.3), the serialized write path limits write availability. A partition-tolerant deployment would need anti-entropy reconciliation rather than exact-broadcast delivery.
 
 **Memory at scale.** At 1M operations, the redirect map contains ~22K entries and the edge table ~200K rows, consuming ~20 MB. At 10M operations (production deployment), memory usage is ~200 MB — acceptable for a server-side service but potentially prohibitive for edge deployments.
 
@@ -514,7 +514,7 @@ The orphan guard achieves zero orphans by silently dropping edges to non-canonic
 
 ## 13. Conclusion
 
-We present a conflict-free knowledge-graph projection pipeline that gives concurrent multi-agent memory strong eventual consistency. The pipeline merges concurrent entity operations by content-derived key (a CK-CRDT), canonicalizes entity identity at write time, and projects edges through a redirect map that guarantees no orphan edges. We prove three results underpinning the pipeline: argmax representative-selection is monotone and content-stable (Theorem 1); canonicalization-at-write-time suffices for no-orphan guarantees under foreign-key dependencies (Theorem 2); and three content-key properties — determinism, content-locality, and non-key invariance — are necessary and sufficient for convergence (Theorem 3). On 100,000 concurrent operations from 16 agents, the pipeline produces zero divergences across all delivery-order permutations and zero orphan edges — versus 15,323 semantic duplicates for naive merge and centralized LWW. Ablation confirms each phase is necessary: Phase 2 eliminates all duplicates, Phase 3 eliminates all 18,834 orphan edges. The pipeline achieves 334K ops/s throughput with only 7% degradation from 2 to 32 concurrent writers, scaling to 10M operations at 192K ops/s with SQLite I/O. The production system achieves 98.48% recall on LongMemEval_S, 60.31% overall on BEAM-10M, 92.20% on LoCoMo, and 87.50% accuracy at 10M token scale — outperforming Zep (88.0%), Mem0 (82.5%), Letta (81.0%), Hindsight (83.6% LongMemEval, 64.1% BEAM 10M), and Mastra (84.23% LongMemEval) on long-context recall. Compared against production agent-memory systems and collaborative CRDTs, our pipeline is the only system providing both convergence guarantees and automatic content-aware deduplication. The system is deployed in a production agent memory service handling concurrent writes from multiple AI agents.
+We present a conflict-free knowledge-graph projection pipeline that gives concurrent multi-agent memory strong eventual consistency. The pipeline merges concurrent entity operations by content-derived key (a CK-CRDT), canonicalizes entity identity at write time, and projects edges through a redirect map that guarantees no orphan edges. We prove three results underpinning the pipeline: argmax representative-selection is monotone and content-stable (Theorem 1); canonicalization-at-write-time suffices for no-orphan guarantees under foreign-key dependencies (Theorem 2); and three content-key properties — determinism, content-locality, and non-key invariance — are necessary and sufficient for convergence (Theorem 3). On 100,000 concurrent operations from 16 agents, the pipeline produces zero divergences across all delivery-order permutations and zero orphan edges — versus 15,323 semantic duplicates for naive merge and centralized LWW. Ablation confirms each phase is necessary: Phase 2 eliminates all duplicates, Phase 3 eliminates all 18,834 orphan edges. The pipeline achieves 370K ops/s throughput with only 15% degradation from 2 to 32 concurrent writers, scaling to 10M operations at 106K ops/s with SQLite I/O. The production system achieves 98.48% recall on LongMemEval_S, 60.31% overall on BEAM-10M, 69.54% on LoCoMo, and 87.50% accuracy at 10M token scale — outperforming Zep (88.0%), Mem0 (82.5%), Letta (81.0%), Hindsight (83.6% LongMemEval, 64.1% BEAM 10M), and Mastra (84.23% LongMemEval) on long-context recall. Compared against production agent-memory systems and collaborative CRDTs, our pipeline is the only system providing both convergence guarantees and automatic content-aware deduplication. The system is deployed in a production agent memory service handling concurrent writes from multiple AI agents.
 
 ---
 

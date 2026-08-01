@@ -27,7 +27,7 @@ The benchmark reproduces all evaluation results from Section 9 of the paper. Eac
 | Paper Section | Benchmark Function | Description |
 |---|---|---|
 | §9.1 Baseline Comparison | `compare_baselines()` | Naive vs LWW vs full pipeline on 100K ops |
-| §9.2 Convergence | `evaluate_convergence()` | Delivery-order permutation testing (1,200 permutations) |
+| §9.2 Convergence | `evaluate_convergence()` | Delivery-order permutation testing (800 trials / 4,800 permutations) |
 | §9.3 Latency and Memory | `measure_latency_percentiles()`, `measure_memory_usage()` | p50/p95/p99 latency, memory at scale |
 | §9.3 Production Scaling | `measure_latency_percentiles()` (SQLite mode) | 100K → 10M ops with SQLite |
 | §9.4 Writer Scaling | `measure_concurrent_writer_scaling()` | Throughput vs agent count (2–32) |
@@ -41,13 +41,13 @@ The benchmark reproduces all evaluation results from Section 9 of the paper. Eac
 Running `python3 benchmark.py` produces:
 
 1. **Baseline Comparison** — 3 rows: naive (16,323 entities, 15,323 dupes), centralized LWW (same), full pipeline (1,000 entities, 0 dupes)
-2. **Convergence** — 1,200 permutations, 0 divergences, 0 orphan edges
-3. **Latency Percentiles** — p50 ≈ 300ms, p95 ≈ 330ms, throughput ≈ 330K ops/s
+2. **Convergence** — 800 trials × 6 permutations (4,800 total), 0 divergences, 0 orphan edges; "lost writes" = writes causally superseded within the write set (~32% for the 50%-collision workload) — these are folded into the winning record's frontier, never dropped
+3. **Latency Percentiles** — p50 ≈ 266ms, p95 ≈ 289ms, throughput ≈ 370K ops/s
 4. **Memory Usage** — 100K: ~2.7 MB, 1M: ~20.3 MB
-5. **Writer Scaling** — 2–32 agents, <10% throughput degradation
+5. **Writer Scaling** — 2–32 agents, 15% throughput degradation (429K → 365K ops/s)
 6. **Ablation Study** — Phase 1: 16,323 entities/15,323 dupes; Phase 1+2: 1,000 entities/18,834 orphans; Full: 1,000 entities/0 orphans
 
-Expected runtime: ~60 seconds on Apple Silicon M-series.
+Expected runtime: ~2 minutes on Apple Silicon M-series.
 
 ## Test Suite
 
@@ -63,6 +63,8 @@ python3 -m pytest ../paper_pipeline/test_adversarial.py -v
 # Paper 2: CK-CRDT framework + counterexamples (36 tests)
 python3 -m pytest ../paper_pipeline_2/test_adversarial.py -v
 ```
+
+124 tests total across the three suites.
 
 ## Artifact Contents
 

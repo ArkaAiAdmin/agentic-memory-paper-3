@@ -239,9 +239,23 @@ def count_duplicates(result: Dict) -> int:
     return sum(len(ids) - 1 for ids in fp_map.values() if len(ids) > 1)
 
 
-def count_lost_writes(result: Dict, total_ops: int) -> int:
-    """Count operations not reflected in the converged state."""
-    return total_ops - len(result["entities"])
+def count_lost_writes(eops: List[EntityOp]) -> int:
+    """Count writes the LWWES merge may legitimately omit.
+
+    A write (agent, clock, entity) is omissible only when it is causally
+    superseded by a strictly later write from the same agent to the same entity
+    (clock strictly below the agent's frontier for that entity). Such writes are
+    folded into the winning record's version-vector join, not dropped; every
+    frontier write is preserved in the converged state.
+    """
+    frontier: Dict[Tuple[str, int], int] = {}
+    for op in eops:
+        key = (op.agent_id, op.entity_id)
+        frontier[key] = max(frontier.get(key, 0), op.version_vector.get(op.agent_id, 0))
+    return sum(
+        1 for op in eops
+        if op.version_vector.get(op.agent_id, 0) < frontier.get((op.agent_id, op.entity_id), 0)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -399,6 +413,7 @@ def evaluate_convergence(n_trials: int = 200, n_agents_list: Optional[List[int]]
     total_lost_writes = 0
     total_orphans = 0
     total_trials = 0
+    total_ops = 0
 
     for n_agents in n_agents_list:
         for trial in range(n_trials):
@@ -431,14 +446,15 @@ def evaluate_convergence(n_trials: int = 200, n_agents_list: Optional[List[int]]
                 total_divergences += 1
 
             # Measure lost writes and orphans on the last result
-            total_lost_writes += count_lost_writes(result, len(eops))
+            total_lost_writes += count_lost_writes(eops)
+            total_ops += len(eops)
             total_orphans += count_orphans(result)
             total_trials += 1
 
     return {
         "n_trials": total_trials,
         "n_divergences": total_divergences,
-        "lost_writes_pct": total_lost_writes / max(total_trials * 1, 1) * 100,
+        "lost_writes_pct": total_lost_writes / max(total_ops, 1) * 100,
         "orphan_edges": total_orphans,
     }
 
@@ -625,7 +641,7 @@ def compare_baselines(n_ops: int = 100_000, n_agents: int = 16) -> Dict:
             "edges": len(r["edges"]),
             "duplicates": count_duplicates(r),
             "orphans": count_orphans(r),
-            "lost_writes": count_lost_writes(r, len(eops)),
+            "lost_writes": count_lost_writes(eops),
             "redirects": len(r["redirects"]),
             "time_us": (t1 - t0) / rounds * 1_000_000,
         }
@@ -752,7 +768,7 @@ def main():
     convergence = evaluate_convergence(n_trials=200, n_agents_list=[2, 4, 8, 16])
     print(f"  Trials: {convergence['n_trials']}")
     print(f"  Divergences: {convergence['n_divergences']}")
-    print(f"  Lost writes: {convergence['lost_writes_pct']:.1f}%")
+    print(f"  Lost writes (causally superseded within write set): {convergence['lost_writes_pct']:.2f}%")
     print(f"  Orphan edges: {convergence['orphan_edges']}")
 
     # 3. Latency percentiles
